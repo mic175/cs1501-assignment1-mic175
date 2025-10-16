@@ -61,31 +61,19 @@ public class BoggleGame implements BoggleGameInterface {
 
         visit[row][col] = true; // mark the letter as used
         currentSolution.append(Character.toLowerCase(boggleBoard[row][col]));
-        boggleBoard[row][col] = Character.toUpperCase(boggleBoard[row][col]);
-
-        int res = dictionary.searchPrefix(currentSolution);
-
-        if (res == 1) {
-            for (int dir = 0; dir < 8; dir++) {
-                int newRow = row + rowOffsets[dir];
-                int newCol = col + colOffsets[dir];
-                if (newRow >= 0 && newRow < boggleBoard.length && newCol >= 0 && newCol < boggleBoard[0].length
-                        && !visit[newRow][newCol]) {
-                    searchWords(newRow, newCol, boggleBoard, visit, dictionary, currentSolution, foundWords);
-                }
-            }
-        }
-        if (res == 2) {
-            if (currentSolution.length() >= 3) {
-                foundWords.add(currentSolution.toString());
-            }
+        // boggleBoard[row][col] = Character.toUpperCase(boggleBoard[row][col]);
+        int len = currentSolution.length();
+        int res = dictionary.searchPrefix(currentSolution); // 0 none, 1 prefix, 2 word, 3 both
+        if (res == 0) { // no prefix or word
+            currentSolution.deleteCharAt(len - 1);
+            visit[row][col] = false;
+            return; // backtrack if no prefix or word
         }
 
-        if (res == 2 || res == 3) { // word
-            if (currentSolution.length() >= 3) {
-                foundWords.add(currentSolution.toString());
-            }
+        if (len >= 3 && (res == 2 || res == 3)) { // word
+            foundWords.add(currentSolution.toString());
         }
+
         if (res == 1 || res == 3) { // prefix / prefix and word
             for (int dir = 0; dir < 8; dir++) {
                 int newRow = row + rowOffsets[dir];
@@ -97,8 +85,8 @@ public class BoggleGame implements BoggleGameInterface {
             }
         }
 
-        currentSolution.deleteCharAt(currentSolution.length() - 1);
-        boggleBoard[row][col] = Character.toLowerCase(boggleBoard[row][col]);
+        currentSolution.deleteCharAt(len - 1);
+        // boggleBoard[row][col] = Character.toLowerCase(boggleBoard[row][col]);
         visit[row][col] = false;
 
     }
@@ -108,18 +96,19 @@ public class BoggleGame implements BoggleGameInterface {
 
         visit[row][col] = true; // mark the letter as used
         currentSolution.append(Character.toLowerCase(boggleBoard[row][col]));
-        // boggleBoard[row][col] = Character.toUpperCase(boggleBoard[row][col]); // meaningless to change case here
+        // boggleBoard[row][col] = Character.toUpperCase(boggleBoard[row][col]); //
+        // meaningless to change case here
 
         int len = currentSolution.length();
-        if(len > wordLength) {
+        if (len > wordLength) {
             currentSolution.deleteCharAt(currentSolution.length() - 1);
             visit[row][col] = false;
             return; // backtrack if current solution exceeds desired length
         }
-        
+
         int res = dictionary.searchPrefix(currentSolution); // 0 none, 1 prefix, 2 word, 3 both
 
-        if(len == wordLength){
+        if (len == wordLength) {
             if (res == 2 || res == 3) { // word / prefix and word
                 foundWords.add(currentSolution.toString());
             }
@@ -128,10 +117,8 @@ public class BoggleGame implements BoggleGameInterface {
             visit[row][col] = false;
             return;
         }
-        
-        
 
-        if (res == 1 || res == 3) { // prefix / prefix and word   
+        if (res == 1 || res == 3) { // prefix / prefix and word
             for (int dir = 0; dir < 8; dir++) {
                 int newRow = row + rowOffsets[dir];
                 int newCol = col + colOffsets[dir];
@@ -143,8 +130,9 @@ public class BoggleGame implements BoggleGameInterface {
             }
         }
 
-        currentSolution.deleteCharAt(currentSolution.length() - 1);
-        // boggleBoard[row][col] = Character.toLowerCase(boggleBoard[row][col]); // meaningless to change case here
+        currentSolution.deleteCharAt(len - 1);
+        // boggleBoard[row][col] = Character.toLowerCase(boggleBoard[row][col]); //
+        // meaningless to change case here
         visit[row][col] = false;
 
     }
@@ -152,17 +140,40 @@ public class BoggleGame implements BoggleGameInterface {
     @Override
     public boolean isWordInDictionary(DictInterface dictionary, String word) {
         // TODO Implement this method
-        return dictionary.searchPrefix(new StringBuilder(word), 0, word.length() - 1) == 2;
+
+        if (dictionary == null || word == null)
+            return false;
+
+        String w = word.trim().toLowerCase();
+        if (w.isEmpty())
+            return false;
+
+        int res = dictionary.searchPrefix(new StringBuilder(w));
+        return res == 2 || res == 3;
     }
 
     @Override
     public boolean isWordInBoard(char[][] boggleBoard, String word) {
-        if (boggleBoard == null)
+        if (boggleBoard == null || boggleBoard.length == 0 || boggleBoard[0].length == 0 || word == null)
             return false;
-        for (int i = 0; i < boggleBoard.length; i++) {
-            for (int j = 0; j < boggleBoard.length; j++) {
-                if (dfs(boggleBoard, i, j, word, 0)) {
-                    return true; // Word found
+        String w = word.trim();
+        if (w.isEmpty())
+            return false;
+
+        int rows = boggleBoard.length, cols = boggleBoard[0].length;
+        if (w.length() > rows * cols)
+            return false; // impossible: not enough cells
+
+        // Normalize once to avoid repeated toUpperCase calls
+        char[] target = w.toUpperCase().toCharArray();
+
+        boolean[][] visited = new boolean[rows][cols];
+        char first = target[0];
+
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                if (Character.toUpperCase(boggleBoard[i][j]) == first && dfs(boggleBoard, i, j, target, 0, visited)) {
+                    return true; // // only start on matching first char
                 }
 
             }
@@ -170,36 +181,36 @@ public class BoggleGame implements BoggleGameInterface {
         return false; // Word not found
     }
 
-    private boolean dfs(char[][] board, int row, int col, String word, int index) {
-        if (index == word.length()) {
+    private boolean dfs(char[][] board, int row, int col, char[] target, int index, boolean[][] visited) {
+        if (index == target.length - 1) {
             return true; // Entire word found
         }
 
-        if (row < 0 || row >= board.length || col < 0 || col >= board[0].length) {
+        int rows = board.length, cols = board[0].length;
+        if (row < 0 || row >= rows || col < 0 || col >= cols || visited[row][col]) {
             return false; // Out of bounds or character mismatch
         }
 
         char current = Character.toUpperCase(board[row][col]);
-        char wordIndex = Character.toUpperCase(word.charAt(index));
+        char wordIndex = target[index];
         if (current != wordIndex) {
             return false;
         }
 
-        board[row][col] = Character.toLowerCase(board[row][col]);
+        visited[row][col] = true;
         // Explore all adjacent directions
-        boolean str = false;
         for (int dir = 0; dir < 8; dir++) {
             int newRow = row + rowOffsets[dir];
             int newCol = col + colOffsets[dir];
             int newIndex = index + 1;
-            str = dfs(board, newRow, newCol, word, newIndex);
-            if (str) {
-                break; // Continue search in the direction
+            if (dfs(board, newRow, newCol, target, newIndex, visited)) {
+                visited[row][col] = false;
+                return true; // Continue search in the direction
             }
         }
 
-        board[row][col] = current;
-        return str;
+        visited[row][col] = false;
+        return false;
     }
 
     @Override

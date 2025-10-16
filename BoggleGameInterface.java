@@ -59,7 +59,6 @@ public interface BoggleGameInterface {
      /**
      * Finds a word of a given length from a given dictionary in a given 
      * Boggle board
-     * @param boggleBoard the 2-d character array representing the Boggle board
      * @param dictionary the DictInterface dictionary
      * @param length the int word length
      * @return a String word (from dictionary) of length characters found in 
