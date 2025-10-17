@@ -7,6 +7,10 @@ public class BoggleGame implements BoggleGameInterface {
     private static final int[] rowOffsets = { -1, -1, -1, 0, 0, 1, 1, 1 };
     private static final int[] colOffsets = { -1, 0, 1, -1, 1, -1, 0, 1 };
 
+    static final class One {
+        String val;
+    }
+
     @Override
     public char[][] generateBoggleBoard(int size) {
         if (size <= 0) {
@@ -182,9 +186,6 @@ public class BoggleGame implements BoggleGameInterface {
     }
 
     private boolean dfs(char[][] board, int row, int col, char[] target, int index, boolean[][] visited) {
-        if (index == target.length - 1) {
-            return true; // Entire word found
-        }
 
         int rows = board.length, cols = board[0].length;
         if (row < 0 || row >= rows || col < 0 || col >= cols || visited[row][col]) {
@@ -195,6 +196,10 @@ public class BoggleGame implements BoggleGameInterface {
         char wordIndex = target[index];
         if (current != wordIndex) {
             return false;
+        }
+
+        if (index == target.length - 1) {
+            return true; // Entire word found
         }
 
         visited[row][col] = true;
@@ -215,15 +220,17 @@ public class BoggleGame implements BoggleGameInterface {
 
     @Override
     public String anyWord(char[][] boggleBoard, DictInterface dictionary) {
+        if (boggleBoard == null || boggleBoard.length == 0 || boggleBoard[0].length == 0 || dictionary == null)
+            return null;
 
-        for (int i = 0; i < boggleBoard.length; i++) {
-            for (int j = 0; j < boggleBoard[0].length; j++) {
-                HashSet<String> foundWords = new HashSet<>();
-                boolean[][] visited = new boolean[boggleBoard.length][boggleBoard[0].length];
+        int rows = boggleBoard.length, cols = boggleBoard[0].length;
+        One out = new One();
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                boolean[][] visited = new boolean[rows][cols];
                 StringBuilder word = new StringBuilder();
-                searchWords(i, j, boggleBoard, visited, dictionary, word, foundWords);
-                if (!foundWords.isEmpty())
-                    return foundWords.iterator().next();
+                if (findAnyWord(i, j, boggleBoard, visited, dictionary, word, out))
+                    return out.val;
             }
 
         }
@@ -231,15 +238,147 @@ public class BoggleGame implements BoggleGameInterface {
         return null;
     }
 
+    private boolean findAnyWord(int row, int col, char[][] boggleBoard, boolean[][] visit,
+            DictInterface dictionary, StringBuilder currentSolution, One out) {
+        visit[row][col] = true; // mark the letter as used
+        currentSolution.append(Character.toLowerCase(boggleBoard[row][col]));
+
+        int len = currentSolution.length();
+        int res = dictionary.searchPrefix(currentSolution); // 0 none, 1 prefix, 2 word, 3 both
+
+        if (res == 0) { // no prefix or word
+            currentSolution.deleteCharAt(len - 1);
+            visit[row][col] = false;
+            return false; // backtrack if no prefix or word
+        }
+
+        if (len >= 3 && (res == 2 || res == 3)) { // word
+            out.val = currentSolution.toString();
+            currentSolution.setLength(len - 1); // clean backtrack (even on success)
+            visit[row][col] = false;
+            return true;
+        }
+        // if prefix: for neighbors -> if (findAnyWord(...)) return true;
+        if (res == 1 || res == 3) { // prefix / prefix and word
+            for (int dir = 0; dir < 8; dir++) {
+                int newRow = row + rowOffsets[dir];
+                int newCol = col + colOffsets[dir];
+                if (newRow >= 0 && newRow < boggleBoard.length && newCol >= 0 && newCol < boggleBoard[0].length
+                        && !visit[newRow][newCol]) {
+                    if (findAnyWord(newRow, newCol, boggleBoard, visit, dictionary, currentSolution, out)) {
+                        currentSolution.setLength(len - 1);
+                        visit[row][col] = false;
+                        return true;
+                    }
+                }
+            }
+        }
+        // pop & unmark
+        currentSolution.setLength(len - 1);
+        visit[row][col] = false;
+        return false;
+    }
+
+    @Override
+    public String anyWord(char[][] boggleBoard, DictInterface dictionary, int length) {
+        if (boggleBoard == null || boggleBoard.length == 0 || boggleBoard[0].length == 0 || dictionary == null)
+            return null;
+
+        int rows = boggleBoard.length, cols = boggleBoard[0].length;
+        if (rows == 0 || cols == 0 || length > rows * cols)
+            return null;
+
+        One out = new One();
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                boolean[][] visited = new boolean[rows][cols];
+                StringBuilder word = new StringBuilder();
+                if (findAnyWordOfLength(i, j, boggleBoard, visited, dictionary, word, out, length))
+                    return out.val;
+            }
+
+        }
+
+        return null;
+    }
+
+    private boolean findAnyWordOfLength(int row, int col, char[][] boggleBoard, boolean[][] visit,
+            DictInterface dictionary, StringBuilder currentSolution, One out, int length) {
+        visit[row][col] = true; // mark the letter as used
+        currentSolution.append(Character.toLowerCase(boggleBoard[row][col]));
+
+        int len = currentSolution.length();
+        if (len > length) {
+            currentSolution.deleteCharAt(currentSolution.length() - 1);
+            visit[row][col] = false;
+            return false; // backtrack if current solution exceeds desired length
+        }
+
+        int res = dictionary.searchPrefix(currentSolution); // 0 none, 1 prefix, 2 word, 3 both
+
+        if (res == 0) { // no prefix or word
+            currentSolution.deleteCharAt(len - 1);
+            visit[row][col] = false;
+            return false; // backtrack if no prefix or word
+        }
+
+        if (len == length) {
+            if (res == 2 || res == 3) { // word
+                out.val = currentSolution.toString();
+                currentSolution.setLength(len - 1); // clean backtrack (even on success)
+                visit[row][col] = false;
+                return true;
+            }
+            currentSolution.setLength(len - 1);
+            visit[row][col] = false;
+            return false;
+        }
+
+        // if prefix: for neighbors -> if (findAnyWord(...)) return true;
+        if (res == 1 || res == 3) { // prefix / prefix and word
+            for (int dir = 0; dir < 8; dir++) {
+                int newRow = row + rowOffsets[dir];
+                int newCol = col + colOffsets[dir];
+                if (newRow >= 0 && newRow < boggleBoard.length && newCol >= 0 && newCol < boggleBoard[0].length
+                        && !visit[newRow][newCol]) {
+                    if (findAnyWordOfLength(newRow, newCol, boggleBoard, visit, dictionary, currentSolution, out,
+                            length)) {
+                        currentSolution.setLength(len - 1);
+                        visit[row][col] = false;
+                        return true;
+                    }
+                }
+            }
+        }
+        // pop & unmark
+        currentSolution.setLength(len - 1);
+        visit[row][col] = false;
+        return false;
+    }
+
     @Override
     public ArrayList<Tile> markWordInBoard(char[][] boggleBoard, String word) {
-        boolean[][] visited = new boolean[boggleBoard.length][boggleBoard[0].length];
-        for (int i = 0; i < boggleBoard.length; i++) {
-            for (int j = 0; j < boggleBoard[i].length; j++) {
-                if (boggleBoard[i][j] == word.charAt(0)) { // Start from the first letter of the word
+        if (boggleBoard == null || word == null || boggleBoard.length == 0 || boggleBoard[0].length == 0)
+            return null;
+
+        String w = word.trim();
+        if (w.isEmpty())
+            return null;
+
+        int rows = boggleBoard.length, cols = boggleBoard[0].length;
+        if (w.length() > rows * cols)
+            return null;
+
+        // Normalize to uppercase once (board is generated uppercase)
+        char[] target = w.toUpperCase().toCharArray();
+
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                if (Character.toUpperCase(boggleBoard[i][j]) == target[0]) { // Start from the first letter of the word
+                    boolean[][] visited = new boolean[rows][cols];
                     ArrayList<Tile> path = new ArrayList<>();
 
-                    if (dfsMark(boggleBoard, i, j, word, 0, visited, path)) {
+                    if (dfsMark(boggleBoard, i, j, target, 0, visited, path)) {
                         return path; // Word found, return path
                     }
                 }
@@ -248,25 +387,31 @@ public class BoggleGame implements BoggleGameInterface {
         return null; // Word not found
     }
 
-    private boolean dfsMark(char[][] board, int row, int col, String word, int index, boolean[][] visited,
+    private boolean dfsMark(char[][] board, int row, int col, char[] target, int index, boolean[][] visited,
             ArrayList<Tile> path) {
-        if (index == word.length()) {
-            return true; // Entire word found
-        }
 
-        if (row < 0 || row >= board.length || col < 0 || col >= board[0].length || visited[row][col]
-                || board[row][col] != word.charAt(index)) {
+        int rows = board.length, cols = board[0].length;
+        if (row < 0 || row >= rows || col < 0 || col >= cols || visited[row][col]) {
             return false; // Out of bounds or character mismatch
         }
 
+        // char match (case-insensitive)
+        if (Character.toUpperCase(board[row][col]) != target[index])
+            return false;
+
+        path.add(new Tile(row, col)); // Add current tile to the path
+
+        if (index == target.length - 1) {
+            return true; // Entire word found
+        }
+
         visited[row][col] = true; // Mark as visited
-        path.add(new Tile(row, col)); // Add current tile to path
 
         // Explore all adjacent directions
         for (int dir = 0; dir < 8; dir++) {
             int newRow = row + rowOffsets[dir];
             int newCol = col + colOffsets[dir];
-            if (dfsMark(board, newRow, newCol, word, index + 1, visited, path)) {
+            if (dfsMark(board, newRow, newCol, target, index + 1, visited, path)) {
                 return true; // Continue search in the direction
             }
         }
@@ -278,20 +423,48 @@ public class BoggleGame implements BoggleGameInterface {
 
     @Override
     public boolean checkTiles(char[][] boggleBoard, ArrayList<Tile> tiles, String word) {
-        if (tiles == null || boggleBoard == null || word == null || tiles.isEmpty() || word.isEmpty()) {
+        if (tiles == null || boggleBoard == null || word == null || tiles.isEmpty()) {
             return false;
         }
 
-        if (tiles.size() != word.length()) {
+        String w = word.trim();
+        if (w.isEmpty())
+            return false;
+
+        int rows = boggleBoard.length, cols = boggleBoard[0].length;
+        if (rows == 0 || cols == 0)
+            return false;
+
+        if (tiles.size() != w.length()) {
             return false; // The number of tiles must match the word's length
         }
 
+        if (w.length() > rows * cols)
+            return false; // impossible: not enough cells
+
+        // Normalize once for case-insensitive compare
+        char[] target = w.toUpperCase().toCharArray();
+        boolean[][] used = new boolean[rows][cols]; // forbid reusing a cell
+
         for (int i = 0; i < tiles.size(); i++) {
             Tile currentTile = tiles.get(i);
+            if (currentTile == null)
+                return false;
+            int r = currentTile.row, c = currentTile.col;
+            // Bounds check
+            if (r < 0 || r >= rows || c < 0 || c >= cols)
+                return false;
+            // No reuse
+            if (used[r][c])
+                return false;
+
+            used[r][c] = true;
+
             // Check if tile matches the corresponding letter in the word
-            if (boggleBoard[currentTile.row][currentTile.col] != word.charAt(i)) {
+            if (Character.toUpperCase(boggleBoard[r][c]) != target[i]) {
                 return false;
             }
+
             // Check adjacency for tiles except for the first one
             if (i > 0) {
                 Tile previousTile = tiles.get(i - 1);
@@ -310,23 +483,6 @@ public class BoggleGame implements BoggleGameInterface {
         // Tiles are adjacent if both row and column differences are less than or equal
         // to 1, but not both 0
         return rowDiff <= 1 && colDiff <= 1 && !(rowDiff == 0 && colDiff == 0);
-    }
-
-    @Override
-    public String anyWord(char[][] boggleBoard, DictInterface dictionary, int length) {
-        for (int i = 0; i < boggleBoard.length; i++) {
-            for (int j = 0; j < boggleBoard[0].length; j++) {
-                HashSet<String> foundWords = new HashSet<>();
-                boolean[][] visited = new boolean[boggleBoard.length][boggleBoard[0].length];
-                StringBuilder word = new StringBuilder();
-                searchWordsOfCertainLength(i, j, boggleBoard, visited, dictionary, word, foundWords, length);
-                if (!foundWords.isEmpty())
-                    return foundWords.iterator().next();
-            }
-
-        }
-
-        return null;
     }
 
     private String generateRandomString(int length) {
